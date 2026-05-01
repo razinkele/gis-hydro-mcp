@@ -105,8 +105,10 @@ def fill_sinks(dem: np.ndarray, *, epsilon: float = 1e-3) -> np.ndarray:
     w[boundary] = dem[boundary]
 
     offsets = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+    # Worst-case propagation distance is the DEM diameter; one iteration advances
+    # the front by 1 cell per offset direction, so cap generously by dimensions.
+    max_iters = max(2 * (h + wd), 200)
     changed = True
-    max_iters = 200
     it = 0
     while changed and it < max_iters:
         changed = False
@@ -130,4 +132,9 @@ def fill_sinks(dem: np.ndarray, *, epsilon: float = 1e-3) -> np.ndarray:
                 target_view = w[r0:r1, c0:c1]
                 target_view[update] = new[update]
                 changed = True
+    # Safety: any cell still sitting at the INF sentinel did not converge —
+    # revert it to the original DEM elevation rather than leaking 1e6 m artifacts.
+    unconverged = valid & (w >= INF - 1.0)
+    if unconverged.any():
+        w[unconverged] = dem[unconverged]
     return w
